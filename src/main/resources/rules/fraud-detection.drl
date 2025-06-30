@@ -1,0 +1,285 @@
+package com.drools.study.rules;
+
+import com.drools.study.model.*;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+
+// Global variables for fraud detection thresholds
+global org.slf4j.Logger logger;
+global Integer maxDailyTransactions;
+global Double maxSingleTransactionAmount;
+global Integer suspiciousVelocityThreshold;
+
+/**
+ * Fraud Detection Rules
+ * 
+ * This rule file demonstrates advanced Drools features for fraud detection:
+ * - Complex pattern matching
+ * - Temporal reasoning
+ * - Accumulate functions
+ * - Complex event processing
+ * - Multi-fact reasoning
+ */
+
+// Rule 1: Detect unusually high transaction amounts
+rule "Detect High Amount Fraud"
+    agenda-group "fraud-detection"
+    salience 100
+    when
+        $customer : Customer()
+        $transaction : Transaction(
+            customerId == $customer.customerId,
+            amount > 10000,
+            status == "PENDING"
+        )
+        $account : Account(
+            customerId == $customer.customerId,
+            balance < $transaction.amount * 2  // Transaction is more than 50% of balance
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_HIGH_AMOUNT_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .transactionId($transaction.getTransactionId())
+            .alertType("FRAUD_HIGH_AMOUNT")
+            .severity("HIGH")
+            .message("Unusually high transaction amount: $" + $transaction.getAmount() + 
+                    " for customer with balance: $" + $account.getBalance())
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        // Mark transaction as suspicious
+        modify($transaction) {
+            setFraudScore($transaction.getFraudScore() + 50),
+            setStatus("SUSPICIOUS")
+        }
+        
+        logger.info("HIGH AMOUNT FRAUD ALERT: Customer {} transaction {} for ${}", 
+                    $customer.getCustomerId(), $transaction.getTransactionId(), $transaction.getAmount());
+end
+
+// Rule 2: Detect rapid-fire transactions (velocity fraud)
+rule "Detect Transaction Velocity Fraud"
+    agenda-group "fraud-detection"
+    salience 90
+    when
+        $customer : Customer()
+        $transactions : List(size >= 5) from collect(
+            Transaction(
+                customerId == $customer.customerId,
+                transactionTime after[0s,300s] LocalDateTime.now().minusMinutes(5)  // Last 5 minutes
+            )
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_VELOCITY_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_VELOCITY")
+            .severity("HIGH")
+            .message("Suspicious transaction velocity: " + $transactions.size() + 
+                    " transactions in 5 minutes")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        // Update fraud scores for all recent transactions
+        for (Object obj : $transactions) {
+            Transaction trans = (Transaction) obj;
+            modify(trans) {
+                setFraudScore(trans.getFraudScore() + 30)
+            }
+        }
+        
+        logger.warn("VELOCITY FRAUD ALERT: Customer {} made {} transactions in 5 minutes", 
+                   $customer.getCustomerId(), $transactions.size());
+end
+
+// Rule 3: Detect geographic anomalies
+rule "Detect Geographic Fraud"
+    agenda-group "fraud-detection"
+    salience 80
+    when
+        $customer : Customer()
+        $trans1 : Transaction(
+            customerId == $customer.customerId,
+            location != null
+        )
+        $trans2 : Transaction(
+            customerId == $customer.customerId,
+            location != null,
+            location != $trans1.location,
+            transactionTime after[0s,3600s] $trans1.transactionTime,  // Within 1 hour
+            this != $trans1
+        )
+        // Check if locations are far apart (simplified logic)
+        eval(!$trans1.getLocation().equals($trans2.getLocation()) && 
+             $trans1.getLocation().length() + $trans2.getLocation().length() > 20)
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_GEOGRAPHIC_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_GEOGRAPHIC")
+            .severity("MEDIUM")
+            .message("Geographic anomaly detected: transactions in " + 
+                    $trans1.getLocation() + " and " + $trans2.getLocation() + " within 1 hour")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        modify($trans2) {
+            setFraudScore($trans2.getFraudScore() + 25)
+        }
+        
+        logger.warn("GEOGRAPHIC FRAUD ALERT: Customer {} transactions in {} and {} within 1 hour", 
+                   $customer.getCustomerId(), $trans1.getLocation(), $trans2.getLocation());
+end
+
+// Rule 4: Detect merchant category fraud patterns
+rule "Detect Merchant Category Fraud"
+    agenda-group "fraud-detection"
+    salience 70
+    when
+        $customer : Customer()
+        $suspiciousCount : Number(intValue >= 3) from accumulate(
+            $trans : Transaction(
+                customerId == $customer.customerId,
+                merchantCategory in ("ATM", "CASINO", "CASH_ADVANCE"),
+                transactionTime after[0s,86400s] LocalDateTime.now().minusDays(1)  // Last 24 hours
+            ),
+            count($trans)
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_MERCHANT_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_MERCHANT_PATTERN")
+            .severity("MEDIUM")
+            .message("Suspicious merchant category pattern: " + $suspiciousCount + 
+                    " high-risk transactions in 24 hours")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        logger.info("MERCHANT FRAUD ALERT: Customer {} has {} suspicious merchant transactions", 
+                   $customer.getCustomerId(), $suspiciousCount);
+end
+
+// Rule 5: Detect round number fraud (common in testing fraud)
+rule "Detect Round Number Fraud"
+    agenda-group "fraud-detection"
+    salience 60
+    when
+        $customer : Customer()
+        $roundTransactions : List(size >= 3) from collect(
+            Transaction(
+                customerId == $customer.customerId,
+                amount % 100 == 0,  // Round hundreds
+                amount >= 500,
+                transactionTime after[0s,3600s] LocalDateTime.now().minusHours(1)  // Last hour
+            )
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_ROUND_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_ROUND_NUMBERS")
+            .severity("LOW")
+            .message("Multiple round number transactions detected: " + $roundTransactions.size() + 
+                    " transactions in last hour")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        logger.info("ROUND NUMBER FRAUD ALERT: Customer {} has {} round number transactions", 
+                   $customer.getCustomerId(), $roundTransactions.size());
+end
+
+// Rule 6: Detect account takeover patterns
+rule "Detect Account Takeover"
+    agenda-group "fraud-detection"
+    salience 95
+    when
+        $customer : Customer()
+        $account : Account(customerId == $customer.customerId)
+        
+        // Sudden change in transaction patterns
+        $recentTransactions : List(size >= 2) from collect(
+            Transaction(
+                customerId == $customer.customerId,
+                transactionTime after[0s,1800s] LocalDateTime.now().minusMinutes(30),  // Last 30 minutes
+                amount > $account.getAverageTransactionAmount() * 3  // Much larger than usual
+            )
+        )
+        
+        // Combined with suspicious location or time
+        exists Transaction(
+            customerId == $customer.customerId,
+            transactionTime after[0s,1800s] LocalDateTime.now().minusMinutes(30),
+            (location == null || 
+             transactionTime.getHour() < 6 || transactionTime.getHour() > 23)  // Unusual time
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_TAKEOVER_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_ACCOUNT_TAKEOVER")
+            .severity("CRITICAL")
+            .message("Potential account takeover: unusual transaction patterns and timing detected")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        // Freeze account for security
+        modify($account) {
+            setStatus("FROZEN"),
+            setLastSecurityCheck(LocalDateTime.now())
+        }
+        
+        logger.error("CRITICAL: Potential account takeover detected for customer {}", 
+                    $customer.getCustomerId());
+end
+
+// Rule 7: Aggregate fraud score assessment
+rule "Assess Overall Fraud Risk"
+    agenda-group "fraud-detection"
+    salience 10  // Low priority, runs after other rules
+    when
+        $customer : Customer()
+        $transaction : Transaction(
+            customerId == $customer.customerId,
+            fraudScore > 0
+        )
+        $totalFraudScore : Number(intValue > 75) from accumulate(
+            Transaction(customerId == $customer.customerId, fraudScore > 0),
+            sum(fraudScore)
+        )
+    then
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("FRAUD_AGGREGATE_" + System.currentTimeMillis())
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD_HIGH_AGGREGATE_SCORE")
+            .severity("HIGH")
+            .message("High aggregate fraud score: " + $totalFraudScore + 
+                    " - immediate review required")
+            .status("ACTIVE")
+            .build();
+        
+        insert(alert);
+        
+        // Update customer risk profile
+        modify($customer) {
+            setRiskLevel("HIGH"),
+            setLastRiskAssessment(LocalDateTime.now())
+        }
+        
+        logger.error("HIGH AGGREGATE FRAUD SCORE: Customer {} score: {}", 
+                    $customer.getCustomerId(), $totalFraudScore);
+end 

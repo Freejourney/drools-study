@@ -1,0 +1,262 @@
+package rules;
+
+import com.drools.study.model.Customer;
+import com.drools.study.model.RiskProfile;
+import com.drools.study.model.Transaction;
+import com.drools.study.model.RiskAlert;
+import com.drools.study.model.Account;
+import java.util.List;
+import java.time.LocalDateTime;
+
+// Global variables that can be used across rules
+global org.slf4j.Logger logger;
+global java.util.List alerts;
+global Integer riskThreshold;
+global Integer fraudThreshold;
+global Double maxTransactionAmount;
+
+/**
+ * Basic Risk Control Rules
+ * These rules demonstrate fundamental Drools concepts and basic risk assessment logic
+ */
+
+// Rule 1: High Risk Customer Detection
+rule "High Risk Customer - Poor Credit Score"
+    agenda-group "validation"
+    salience 100
+    when
+        $customer: Customer(creditScore != null, creditScore < 600)
+    then
+        logger.info("High risk customer detected: {} with credit score: {}", 
+                   $customer.getCustomerId(), $customer.getCreditScore());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $customer.getCustomerId() + "_CREDIT")
+            .customerId($customer.getCustomerId())
+            .alertType("CREDIT")
+            .severity("HIGH")
+            .status("OPEN")
+            .title("Poor Credit Score Alert")
+            .description("Customer has poor credit score: " + $customer.getCreditScore())
+            .ruleName("High Risk Customer - Poor Credit Score")
+            .riskScore(85)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 2: Blacklisted Customer Check
+rule "Blacklisted Customer Alert"
+    agenda-group "validation" 
+    salience 200
+    no-loop true
+    when
+        $customer: Customer(isBlacklisted == true)
+    then
+        logger.warn("CRITICAL: Blacklisted customer detected: {}", $customer.getCustomerId());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $customer.getCustomerId() + "_BLACKLIST")
+            .customerId($customer.getCustomerId())
+            .alertType("COMPLIANCE")
+            .severity("CRITICAL")
+            .status("OPEN")
+            .title("Blacklisted Customer")
+            .description("Customer is on blacklist")
+            .ruleName("Blacklisted Customer Alert")
+            .riskScore(100)
+            .requiresRegulatoryReporting(true)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 3: High Value Transaction Monitoring
+rule "High Value Transaction Alert"
+    agenda-group "transaction-monitoring"
+    salience 90
+    when
+        $transaction: Transaction(amount >= 10000)
+        $customer: Customer(customerId == $transaction.customerId)
+    then
+        logger.info("High value transaction detected: {} amount: {}", 
+                   $transaction.getTransactionId(), $transaction.getAmount());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $transaction.getTransactionId() + "_HIGH_VALUE")
+            .customerId($customer.getCustomerId())
+            .transactionId($transaction.getTransactionId())
+            .alertType("FRAUD")
+            .severity("MEDIUM")
+            .status("OPEN")
+            .title("High Value Transaction")
+            .description("Transaction amount exceeds $10,000: $" + $transaction.getAmount())
+            .ruleName("High Value Transaction Alert")
+            .riskScore(60)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+        
+        // Modify transaction to flag it as suspicious
+        modify($transaction) {
+            setIsSuspicious(true),
+            setRiskScore(60)
+        }
+end
+
+// Rule 4: Night Time Transaction Pattern
+rule "Suspicious Night Time Transaction"
+    agenda-group "pattern-analysis"
+    salience 70
+    when
+        $transaction: Transaction(isNightTransaction() == true, amount > 5000)
+        $customer: Customer(customerId == $transaction.customerId, isNewCustomer() == true)
+    then
+        logger.info("Suspicious night transaction by new customer: {} at {}", 
+                   $customer.getCustomerId(), $transaction.getTimestamp());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $transaction.getTransactionId() + "_NIGHT")
+            .customerId($customer.getCustomerId())
+            .transactionId($transaction.getTransactionId())
+            .alertType("FRAUD")
+            .severity("HIGH")
+            .status("OPEN")
+            .title("Suspicious Night Transaction")
+            .description("New customer making large transaction at night")
+            .ruleName("Suspicious Night Time Transaction")
+            .riskScore(75)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 5: Multiple Risk Factors Accumulation
+rule "Multiple Risk Factors Alert"
+    agenda-group "pattern-analysis"
+    salience 50
+    when
+        $customer: Customer()
+        $alertCount: Number(intValue >= 2) from accumulate(
+            RiskAlert(customerId == $customer.customerId, isHighSeverity() == true),
+            count(1)
+        )
+    then
+        logger.warn("Customer {} has multiple high severity alerts: {}", 
+                   $customer.getCustomerId(), $alertCount);
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $customer.getCustomerId() + "_MULTIPLE")
+            .customerId($customer.getCustomerId())
+            .alertType("OPERATIONAL")
+            .severity("CRITICAL")
+            .status("OPEN")
+            .title("Multiple Risk Factors")
+            .description("Customer has " + $alertCount + " high severity alerts")
+            .ruleName("Multiple Risk Factors Alert")
+            .riskScore(90)
+            .requiresRegulatoryReporting(true)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 6: VIP Customer Special Handling
+rule "VIP Customer Transaction Monitoring"
+    agenda-group "transaction-monitoring"
+    salience 95
+    when
+        $customer: Customer(isVip == true)
+        $transaction: Transaction(customerId == $customer.customerId, amount >= 25000)
+    then
+        logger.info("VIP customer large transaction detected: {} amount: {}", 
+                   $customer.getCustomerId(), $transaction.getAmount());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $transaction.getTransactionId() + "_VIP")
+            .customerId($customer.getCustomerId())
+            .transactionId($transaction.getTransactionId())
+            .alertType("OPERATIONAL")
+            .severity("LOW")
+            .status("OPEN")
+            .title("VIP Customer Large Transaction")
+            .description("VIP customer transaction requires notification")
+            .ruleName("VIP Customer Transaction Monitoring")
+            .riskScore(30)
+            .requiresCustomerNotification(false)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 7: Account Balance Risk Check
+rule "Low Balance Risk Assessment"
+    agenda-group "validation"
+    salience 60
+    when
+        $account: Account(hasLowBalance() == true, isDormant() == false)
+        $customer: Customer(customerId == $account.customerId, isNewCustomer() == false)
+    then
+        logger.info("Low balance detected for account: {} customer: {}", 
+                   $account.getAccountNumber(), $customer.getCustomerId());
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $account.getAccountNumber() + "_LOW_BALANCE")
+            .customerId($customer.getCustomerId())
+            .accountNumber($account.getAccountNumber())
+            .alertType("OPERATIONAL")
+            .severity("MEDIUM")
+            .status("OPEN")
+            .title("Low Account Balance")
+            .description("Account balance is below minimum threshold")
+            .ruleName("Low Balance Risk Assessment")
+            .riskScore(45)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end
+
+// Rule 8: Transaction Velocity Check
+rule "High Transaction Velocity Alert"
+    agenda-group "fraud-detection"
+    salience 80
+    when
+        $customer: Customer()
+        $transactionCount: Number(intValue >= 10) from accumulate(
+            Transaction(customerId == $customer.customerId, isDuringBusinessHours() == false),
+            count(1)
+        )
+    then
+        logger.warn("High transaction velocity detected for customer: {} count: {}", 
+                   $customer.getCustomerId(), $transactionCount);
+        
+        RiskAlert alert = RiskAlert.builder()
+            .alertId("ALERT_" + $customer.getCustomerId() + "_VELOCITY")
+            .customerId($customer.getCustomerId())
+            .alertType("FRAUD")
+            .severity("HIGH")
+            .status("OPEN")
+            .title("High Transaction Velocity")
+            .description("Customer has " + $transactionCount + " transactions outside business hours")
+            .ruleName("High Transaction Velocity Alert")
+            .riskScore(80)
+            .createdDate(LocalDateTime.now())
+            .build();
+        
+        alerts.add(alert);
+        insert(alert);
+end 

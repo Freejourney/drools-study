@@ -1,0 +1,60 @@
+spring:
+  application:
+    name: drools-study
+  profiles:
+    active: dev
+    
+# Development profile configuration
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+
+# Logging configuration
+logging:
+  level:
+    com.drools.study: DEBUG
+    org.drools: INFO
+    org.kie: INFO
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/drools-study.log
+
+# Server configuration
+server:
+  port: 8080
+  servlet:
+    context-path: /api
+    
+# Actuator configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,drools
+  endpoint:
+    health:
+      show-details: always
+
+# Custom application properties
+drools:
+  rules:
+    auto-reload: true
+    cache-enabled: true
+  performance:
+    monitoring-enabled: true
+    
+risk-control:
+  thresholds:
+    high-risk: 70
+    medium-risk: 40
+    fraud-threshold: 80
+  limits:
+    max-transaction-amount: 50000
+    daily-transaction-limit: 100000
+  monitoring:
+    real-time-enabled: true
+    batch-size: 1000 
