@@ -1,0 +1,34 @@
+template header
+riskLevel
+scoreThreshold
+alertType
+severity
+description
+
+package com.drools.study.templates;
+
+import com.drools.study.model.*;
+import java.time.LocalDateTime;
+
+template "Risk Assessment Template"
+
+rule "Risk Assessment - @{riskLevel}"
+    when
+        $customer : Customer()
+        $riskProfile : RiskProfile(
+            customerId == $customer.customerId,
+            overallRiskScore >= @{scoreThreshold}
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("@{alertType}");
+        alert.setSeverity("@{severity}");
+        alert.setDescription("@{description}");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("Risk Alert: @{riskLevel} for customer " + $customer.getCustomerId());
+end
+
+end template 

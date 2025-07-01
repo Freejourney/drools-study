@@ -1,0 +1,19 @@
+RuleTable Credit Scoring Decision Table
+CONDITION,CONDITION,CONDITION,ACTION,ACTION
+Customer,Credit Score,Annual Income,Credit Level,Interest Rate
+age >= 18 && age <= 25,>= 700,>= 50000,EXCELLENT,2.5%
+age >= 18 && age <= 25,>= 650 && < 700,>= 50000,GOOD,3.5%
+age >= 18 && age <= 25,>= 600 && < 650,>= 30000,FAIR,5.5%
+age >= 18 && age <= 25,< 600,,POOR,8.5%
+age > 25 && age <= 35,>= 700,>= 60000,EXCELLENT,2.0%
+age > 25 && age <= 35,>= 650 && < 700,>= 40000,GOOD,3.0%
+age > 25 && age <= 35,>= 600 && < 650,>= 30000,FAIR,5.0%
+age > 25 && age <= 35,< 600,,POOR,8.0%
+age > 35 && age <= 50,>= 700,>= 70000,EXCELLENT,1.8%
+age > 35 && age <= 50,>= 650 && < 700,>= 50000,GOOD,2.8%
+age > 35 && age <= 50,>= 600 && < 650,>= 35000,FAIR,4.8%
+age > 35 && age <= 50,< 600,,POOR,7.5%
+age > 50,>= 700,>= 80000,EXCELLENT,2.2%
+age > 50,>= 650 && < 700,>= 60000,GOOD,3.2%
+age > 50,>= 600 && < 650,>= 40000,FAIR,5.2%
+age > 50,< 600,,POOR,7.8% 

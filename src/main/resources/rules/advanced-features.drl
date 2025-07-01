@@ -1,0 +1,155 @@
+package com.drools.study.rules
+
+import com.drools.study.model.*
+
+global java.util.List alerts;
+global java.lang.String systemMode;
+
+/**
+ * Advanced Features Rules
+ * Demonstrates advanced Drools capabilities including globals, rule flows, and complex patterns
+ */
+
+// Rule with global variable usage
+rule "Use Global Alert List"
+    agenda-group "advanced-features"
+    salience 100
+    when
+        $alert : RiskAlert(riskLevel == "CRITICAL")
+    then
+        alerts.add($alert);
+        System.out.println("Critical alert added to global list: " + $alert.getAlertType());
+end
+
+// Rule with lock-on-active to prevent infinite loops
+rule "Update Risk Profile"
+    agenda-group "advanced-features"
+    lock-on-active
+    salience 95
+    when
+        $customer : Customer()
+        $profile : RiskProfile(customerId == $customer.customerId)
+        accumulate(
+            $alert : RiskAlert(customerId == $customer.customerId, riskLevel == "HIGH"),
+            $count : count($alert)
+        )
+        eval($count >= 3)
+    then
+        modify($profile) {
+            setRiskLevel("HIGH"),
+            setLastUpdated(java.time.LocalDateTime.now())
+        }
+        System.out.println("Risk profile updated for customer " + $customer.getCustomerId());
+end
+
+// Rule with no-loop to prevent self-triggering
+rule "Auto Generate Risk Assessment"
+    agenda-group "advanced-features"
+    no-loop
+    salience 90
+    when
+        $customer : Customer()
+        not RiskAssessment(customerId == $customer.customerId)
+        exists RiskAlert(customerId == $customer.customerId)
+    then
+        RiskAssessment assessment = new RiskAssessment();
+        assessment.setCustomerId($customer.getCustomerId());
+        assessment.setAssessmentType("AUTO_GENERATED");
+        assessment.setOverallRisk("MEDIUM");
+        assessment.setAssessmentDate(java.time.LocalDateTime.now());
+        assessment.setRecommendation("Monitor customer activity");
+        insert(assessment);
+        System.out.println("Auto-generated risk assessment for customer " + $customer.getCustomerId());
+end
+
+// Complex event processing pattern
+rule "Detect Fraud Pattern Sequence"
+    agenda-group "advanced-features"
+    salience 85
+    when
+        $txn1 : Transaction(transactionType == "WITHDRAWAL", amount >= 5000)
+        $txn2 : Transaction(
+            this != $txn1,
+            customerId == $txn1.customerId,
+            transactionType == "TRANSFER",
+            timestamp after[0s,30m] $txn1.timestamp
+        )
+        $txn3 : Transaction(
+            this != $txn1 && this != $txn2,
+            customerId == $txn1.customerId,
+            transactionType == "WITHDRAWAL",
+            timestamp after[0s,15m] $txn2.timestamp
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($txn1.getCustomerId());
+        alert.setAlertType("FRAUD_SEQUENCE_PATTERN");
+        alert.setRiskLevel("CRITICAL");
+        alert.setMessage("Suspicious transaction sequence detected");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        insert(alert);
+        System.out.println("CRITICAL: Fraud sequence pattern detected for customer " + $txn1.getCustomerId());
+end
+
+// Rule with timer for delayed execution
+rule "Cleanup Old Alerts"
+    agenda-group "advanced-features"
+    timer(cron: 0 0 2 * * ?) // Run at 2 AM daily
+    salience 80
+    when
+        $alert : RiskAlert(eval(java.time.ChronoUnit.DAYS.between(timestamp, java.time.LocalDateTime.now()) > 30))
+    then
+        retract($alert);
+        System.out.println("Cleaned up old alert: " + $alert.getAlertId());
+end
+
+// Rule using system mode global
+rule "Development Mode Logging"
+    agenda-group "advanced-features"
+    salience 75
+    when
+        eval("DEVELOPMENT".equals(systemMode))
+        $transaction : Transaction()
+    then
+        System.out.println("DEV LOG: Transaction processed - " + $transaction.getTransactionId() + 
+                          " Amount: " + $transaction.getAmount());
+end
+
+// Rule with ruleflow-group for process control
+rule "Process VIP Customer Transactions"
+    ruleflow-group "vip-processing"
+    salience 70
+    when
+        $customer : Customer(vip == true)
+        $transaction : Transaction(customerId == $customer.customerId, amount >= 1000)
+    then
+        // VIP customers get priority processing
+        $transaction.setStatus("VIP_PROCESSED");
+        System.out.println("VIP transaction processed: " + $transaction.getTransactionId());
+end
+
+// Rule with dialect specification for Java code
+rule "Calculate Risk Score"
+    agenda-group "advanced-features"
+    dialect "java"
+    salience 65
+    when
+        $customer : Customer()
+        $assessment : RiskAssessment(customerId == $customer.customerId, riskScore == null)
+    then
+        int riskScore = calculateRiskScore($customer, $assessment);
+        modify($assessment) { setRiskScore(riskScore) }
+        System.out.println("Risk score calculated: " + riskScore + " for customer " + $customer.getCustomerId());
+end
+
+// Helper function for risk score calculation
+function int calculateRiskScore(Customer customer, RiskAssessment assessment) {
+    int score = 50; // Base score
+    
+    if (customer.isBlacklisted()) score += 30;
+    if (customer.isVip()) score -= 20;
+    if ("HIGH".equals(assessment.getOverallRisk())) score += 25;
+    if ("LOW".equals(assessment.getOverallRisk())) score -= 15;
+    
+    return Math.max(0, Math.min(100, score)); // Ensure 0-100 range
+} 

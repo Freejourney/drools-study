@@ -1,0 +1,139 @@
+package com.drools.study.rules
+
+import com.drools.study.model.LoanApplication
+import com.drools.study.model.Customer
+import com.drools.study.model.CreditScore
+import com.drools.study.model.Account
+import com.drools.study.model.RiskAlert
+
+/**
+ * Loan Approval Rules
+ * Rules for evaluating loan applications and determining approval decisions
+ */
+
+// Automatic approval for excellent credit and low loan amounts
+rule "Auto Approve Low Amount High Credit"
+    agenda-group "loan-approval"
+    salience 100
+    when
+        $loan : LoanApplication(status == "PENDING", loanAmount <= 50000)
+        $credit : CreditScore(customerId == $loan.customerId, score >= 750)
+        $customer : Customer(customerId == $loan.customerId, !blacklisted)
+    then
+        modify($loan) {
+            setStatus("APPROVED"),
+            setApprovalDate(java.time.LocalDateTime.now()),
+            setInterestRate(4.5),
+            setApprovalReason("Auto approved - excellent credit, low amount")
+        }
+        System.out.println("APPROVED: Loan auto-approved for customer " + $customer.getCustomerId());
+end
+
+// Automatic rejection for blacklisted customers
+rule "Auto Reject Blacklisted Customer"
+    agenda-group "loan-approval"
+    salience 95
+    when
+        $loan : LoanApplication(status == "PENDING")
+        $customer : Customer(customerId == $loan.customerId, blacklisted == true)
+    then
+        modify($loan) {
+            setStatus("REJECTED"),
+            setRejectionDate(java.time.LocalDateTime.now()),
+            setRejectionReason("Customer is blacklisted")
+        }
+        System.out.println("REJECTED: Loan rejected - blacklisted customer " + $customer.getCustomerId());
+end
+
+// Auto reject very poor credit scores
+rule "Auto Reject Poor Credit Score"
+    agenda-group "loan-approval"
+    salience 90
+    when
+        $loan : LoanApplication(status == "PENDING")
+        $credit : CreditScore(customerId == $loan.customerId, score < 450)
+    then
+        modify($loan) {
+            setStatus("REJECTED"),
+            setRejectionDate(java.time.LocalDateTime.now()),
+            setRejectionReason("Credit score too low: " + $credit.getScore())
+        }
+        System.out.println("REJECTED: Poor credit score " + $credit.getScore() + " for customer " + $loan.getCustomerId());
+end
+
+// Debt-to-income ratio check
+rule "High Debt to Income Ratio"
+    agenda-group "loan-approval"
+    salience 85
+    when
+        $loan : LoanApplication(status == "PENDING", eval($loan.getMonthlyPayment() / $loan.getMonthlyIncome() > 0.4))
+    then
+        modify($loan) {
+            setStatus("REJECTED"),
+            setRejectionDate(java.time.LocalDateTime.now()),
+            setRejectionReason("Debt-to-income ratio too high")
+        }
+        System.out.println("REJECTED: High debt-to-income ratio for customer " + $loan.getCustomerId());
+end
+
+// Loan amount vs income validation
+rule "Loan Amount Too High Relative to Income"
+    agenda-group "loan-approval"
+    salience 80
+    when
+        $loan : LoanApplication(status == "PENDING", eval($loan.getLoanAmount() > $loan.getAnnualIncome() * 5))
+    then
+        modify($loan) {
+            setStatus("REJECTED"),
+            setRejectionDate(java.time.LocalDateTime.now()),
+            setRejectionReason("Loan amount exceeds 5x annual income")
+        }
+        System.out.println("REJECTED: Loan amount too high relative to income for customer " + $loan.getCustomerId());
+end
+
+// Manual review for medium risk cases
+rule "Manual Review Required"
+    agenda-group "loan-approval"
+    salience 70
+    when
+        $loan : LoanApplication(status == "PENDING", loanAmount >= 50000)
+        $credit : CreditScore(customerId == $loan.customerId, score >= 550 && score < 650)
+    then
+        modify($loan) {
+            setStatus("MANUAL_REVIEW"),
+            setReviewDate(java.time.LocalDateTime.now()),
+            setReviewReason("Medium credit score with high loan amount")
+        }
+        System.out.println("MANUAL REVIEW: Loan requires manual review for customer " + $loan.getCustomerId());
+end
+
+// Interest rate assignment based on credit score
+rule "Assign Interest Rate - Excellent Credit"
+    agenda-group "loan-approval"
+    salience 60
+    when
+        $loan : LoanApplication(status == "APPROVED", interestRate == null)
+        $credit : CreditScore(customerId == $loan.customerId, score >= 750)
+    then
+        modify($loan) { setInterestRate(4.5) }
+end
+
+rule "Assign Interest Rate - Good Credit"
+    agenda-group "loan-approval"
+    salience 60
+    when
+        $loan : LoanApplication(status == "APPROVED", interestRate == null)
+        $credit : CreditScore(customerId == $loan.customerId, score >= 650 && score < 750)
+    then
+        modify($loan) { setInterestRate(6.5) }
+end
+
+rule "Assign Interest Rate - Fair Credit"
+    agenda-group "loan-approval"
+    salience 60
+    when
+        $loan : LoanApplication(status == "APPROVED", interestRate == null)
+        $credit : CreditScore(customerId == $loan.customerId, score >= 550 && score < 650)
+    then
+        modify($loan) { setInterestRate(9.5) }
+end 

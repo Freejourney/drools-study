@@ -331,4 +331,55 @@ public class DroolsService {
             throw new RuntimeException("Failed to create new session", e);
         }
     }
+    
+    /**
+     * Executes rules with specified session name and facts.
+     * This method provides a generic way to execute rules with custom session configuration.
+     * 
+     * @param sessionName the name of the session to use
+     * @param facts the facts to insert into the session
+     * @return list of results from rule execution
+     */
+    public List<Object> executeRules(String sessionName, List<Object> facts) {
+        logger.info("Executing rules with session: {} and {} facts", sessionName, facts.size());
+        
+        List<Object> results = new ArrayList<>();
+        KieSession session = null;
+        
+        try {
+            // Create new session with specified name
+            session = createNewSession(sessionName);
+            
+            // Set up global for collecting results
+            session.setGlobal("results", results);
+            
+            // Insert all facts
+            for (Object fact : facts) {
+                session.insert(fact);
+            }
+            
+            // Fire all rules
+            int rulesFired = session.fireAllRules();
+            logger.info("Fired {} rules with session {}", rulesFired, sessionName);
+            
+            // Collect all facts from working memory as results
+            Collection<FactHandle> factHandles = session.getFactHandles();
+            for (FactHandle handle : factHandles) {
+                Object fact = session.getObject(handle);
+                if (!facts.contains(fact)) { // Only add new facts created by rules
+                    results.add(fact);
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("Error executing rules with session {}: {}", sessionName, e.getMessage(), e);
+            throw new RuntimeException("Rule execution failed", e);
+        } finally {
+            if (session != null) {
+                session.dispose();
+            }
+        }
+        
+        return results;
+    }
 } 

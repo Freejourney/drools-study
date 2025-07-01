@@ -1,0 +1,317 @@
+package com.drools.study.rules
+
+import com.drools.study.model.Transaction
+import com.drools.study.model.Customer
+import com.drools.study.model.Account
+import com.drools.study.model.RiskAlert
+
+/**
+ * Transaction Monitoring Rules
+ * Advanced rules for detecting suspicious transaction patterns, velocities, and anomalies
+ */
+
+// Transaction velocity monitoring - too many transactions in short time
+rule "High Transaction Velocity"
+    agenda-group "transaction-monitoring"
+    salience 90
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(customerId == $customer.customerId, timestamp after[0s,1h]),
+            $count : count($transaction)
+        )
+        eval($count >= 10)  // More than 10 transactions in 1 hour
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM001_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("HIGH_VELOCITY");
+        alert.setRiskLevel("HIGH");
+        alert.setMessage("High transaction velocity detected: " + $count + " transactions in 1 hour");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("BLOCK_CUSTOMER");
+        insert(alert);
+        System.out.println("ALERT: High transaction velocity for customer " + $customer.getCustomerId());
+end
+
+// Large amount transactions within short period
+rule "High Volume in Short Period"
+    agenda-group "transaction-monitoring"
+    salience 85
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(customerId == $customer.customerId, timestamp after[0s,2h]),
+            $totalAmount : sum($transaction.getAmount())
+        )
+        eval($totalAmount >= 50000)  // More than $50,000 in 2 hours
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM002_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("HIGH_VOLUME");
+        alert.setRiskLevel("HIGH");
+        alert.setMessage("High transaction volume: $" + $totalAmount + " in 2 hours");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("MANUAL_REVIEW");
+        insert(alert);
+        System.out.println("ALERT: High transaction volume for customer " + $customer.getCustomerId());
+end
+
+// Round number pattern detection
+rule "Round Number Pattern Detection"
+    agenda-group "transaction-monitoring"
+    salience 75
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,24h],
+                amount % 1000 == 0  // Round thousands
+            ),
+            $roundCount : count($transaction)
+        )
+        accumulate(
+            $allTransactions : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,24h]
+            ),
+            $totalCount : count($allTransactions)
+        )
+        eval($roundCount >= 3 && $roundCount >= $totalCount * 0.8)  // At least 3 and 80% are round numbers
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM003_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("ROUND_NUMBER_PATTERN");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("Suspicious round number pattern: " + $roundCount + " out of " + $totalCount + " transactions");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("INVESTIGATE");
+        insert(alert);
+        System.out.println("ALERT: Round number pattern detected for customer " + $customer.getCustomerId());
+end
+
+// Multiple locations in short time (possible card skimming)
+rule "Multiple Locations Anomaly"
+    agenda-group "transaction-monitoring"
+    salience 80
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,2h],
+                location != null
+            ),
+            $locations : collectSet($transaction.getLocation())
+        )
+        eval($locations.size() >= 3)  // 3 or more different locations in 2 hours
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM004_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("MULTIPLE_LOCATIONS");
+        alert.setRiskLevel("HIGH");
+        alert.setMessage("Multiple locations in short time: " + $locations.size() + " locations in 2 hours");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("BLOCK_CARD");
+        insert(alert);
+        System.out.println("ALERT: Multiple locations detected for customer " + $customer.getCustomerId());
+end
+
+// Escalating amount pattern
+rule "Escalating Amount Pattern"
+    agenda-group "transaction-monitoring"
+    salience 70
+    when
+        $customer : Customer()
+        $transactions : java.util.List(size >= 3) from accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,6h]
+            ),
+            collectList($transaction)
+        )
+        eval(isEscalatingPattern($transactions))
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM005_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("ESCALATING_PATTERN");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("Escalating amount pattern detected over 6 hours");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("MONITOR");
+        insert(alert);
+        System.out.println("ALERT: Escalating pattern detected for customer " + $customer.getCustomerId());
+end
+
+// Unusual time pattern (transactions at odd hours)
+rule "Unusual Time Pattern"
+    agenda-group "transaction-monitoring"
+    salience 65
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,7d],
+                eval($transaction.isNightTransaction())  // Between 10 PM and 6 AM
+            ),
+            $nightCount : count($transaction)
+        )
+        accumulate(
+            $allTransactions : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,7d]
+            ),
+            $totalCount : count($allTransactions)
+        )
+        eval($nightCount >= 5 && $nightCount >= $totalCount * 0.6)  // 60% or more at night
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM006_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("UNUSUAL_TIME_PATTERN");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("Unusual time pattern: " + $nightCount + " night transactions out of " + $totalCount);
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("INVESTIGATE");
+        insert(alert);
+        System.out.println("ALERT: Unusual time pattern for customer " + $customer.getCustomerId());
+end
+
+// Duplicate transaction detection
+rule "Potential Duplicate Transaction"
+    agenda-group "transaction-monitoring"
+    salience 85
+    when
+        $transaction1 : Transaction()
+        $transaction2 : Transaction(
+            this != $transaction1,
+            customerId == $transaction1.customerId,
+            amount == $transaction1.amount,
+            transactionType == $transaction1.transactionType,
+            eval(java.time.Duration.between($transaction1.getTimestamp(), $transaction2.getTimestamp()).abs().toMinutes() <= 5)
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM007_" + $transaction1.getCustomerId());
+        alert.setCustomerId($transaction1.getCustomerId());
+        alert.setAlertType("DUPLICATE_TRANSACTION");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("Potential duplicate: $" + $transaction1.getAmount() + " within 5 minutes");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("INVESTIGATE");
+        insert(alert);
+        System.out.println("ALERT: Potential duplicate transaction for customer " + $transaction1.getCustomerId());
+end
+
+// ATM withdrawal pattern anomaly
+rule "Unusual ATM Pattern"
+    agenda-group "transaction-monitoring"
+    salience 60
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,24h],
+                channel == "ATM",
+                transactionType == "WITHDRAWAL"
+            ),
+            $atmCount : count($transaction),
+            $totalAmount : sum($transaction.getAmount())
+        )
+        eval($atmCount >= 5 || $totalAmount >= 2000)  // 5+ ATM withdrawals OR $2000+ total
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM008_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("UNUSUAL_ATM_PATTERN");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("Unusual ATM activity: " + $atmCount + " withdrawals, $" + $totalAmount + " total");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("MONITOR");
+        insert(alert);
+        System.out.println("ALERT: Unusual ATM pattern for customer " + $customer.getCustomerId());
+end
+
+// Cross-border transaction monitoring
+rule "International Transaction Monitoring"
+    agenda-group "transaction-monitoring"
+    salience 55
+    when
+        $transaction : Transaction(isInternational == true, amount >= 1000)
+        $customer : Customer(customerId == $transaction.customerId, eval(!customer.isVip()))
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM009_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("INTERNATIONAL_TRANSACTION");
+        alert.setRiskLevel("MEDIUM");
+        alert.setMessage("International transaction: $" + $transaction.getAmount() + " to " + $transaction.getCountry());
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("VERIFY_CUSTOMER");
+        insert(alert);
+        System.out.println("ALERT: International transaction for customer " + $customer.getCustomerId());
+end
+
+// Channel switching pattern (possible fraud)
+rule "Rapid Channel Switching"
+    agenda-group "transaction-monitoring"
+    salience 70
+    when
+        $customer : Customer()
+        accumulate(
+            $transaction : Transaction(
+                customerId == $customer.customerId,
+                timestamp after[0s,1h],
+                channel != null
+            ),
+            $channels : collectSet($transaction.getChannel())
+        )
+        eval($channels.size() >= 3)  // 3+ different channels in 1 hour
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setAlertId("TM010_" + $customer.getCustomerId());
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("CHANNEL_SWITCHING");
+        alert.setRiskLevel("HIGH");
+        alert.setMessage("Rapid channel switching: " + $channels.size() + " channels in 1 hour");
+        alert.setTimestamp(java.time.LocalDateTime.now());
+        alert.setSource("transaction-monitoring");
+        alert.setRecommendedAction("INVESTIGATE");
+        insert(alert);
+        System.out.println("ALERT: Rapid channel switching for customer " + $customer.getCustomerId());
+end
+
+// Helper function to check escalating pattern
+function boolean isEscalatingPattern(java.util.List transactions) {
+    if (transactions.size() < 3) return false;
+    
+    // Sort by timestamp
+    java.util.Collections.sort(transactions, (t1, t2) -> 
+        ((Transaction)t1).getTimestamp().compareTo(((Transaction)t2).getTimestamp()));
+    
+    // Check if amounts are generally increasing
+    for (int i = 1; i < transactions.size(); i++) {
+        Transaction current = (Transaction) transactions.get(i);
+        Transaction previous = (Transaction) transactions.get(i-1);
+        if (current.getAmount() <= previous.getAmount()) {
+            return false;
+        }
+    }
+    return true;
+} 

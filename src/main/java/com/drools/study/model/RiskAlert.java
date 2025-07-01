@@ -258,4 +258,12 @@ public class RiskAlert {
     public boolean hasHighRiskScore() {
         return riskScore != null && riskScore >= 70;
     }
+    
+    /**
+     * Gets the risk level which corresponds to the severity
+     * @return risk level (severity)
+     */
+    public String getRiskLevel() {
+        return severity;
+    }
 } 

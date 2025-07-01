@@ -1,0 +1,100 @@
+package com.drools.study.rules
+
+import com.drools.study.model.*
+
+/**
+ * Decision Tables Rules
+ * Demonstrates decision table style rules for structured decision making
+ */
+
+// Credit scoring decision table
+rule "Credit Score Band A"
+    agenda-group "decision-tables"
+    salience 100
+    when
+        $customer : Customer()
+        $credit : CreditScore(customerId == $customer.customerId, score >= 750)
+        $account : Account(customerId == $customer.customerId, balance >= 50000)
+    then
+        $customer.setRiskRating("LOW");
+        System.out.println("Risk Rating: LOW for customer " + $customer.getCustomerId());
+end
+
+rule "Credit Score Band B"
+    agenda-group "decision-tables"
+    salience 95
+    when
+        $customer : Customer()
+        $credit : CreditScore(customerId == $customer.customerId, score >= 650, score < 750)
+        $account : Account(customerId == $customer.customerId, balance >= 20000)
+    then
+        $customer.setRiskRating("MEDIUM");
+        System.out.println("Risk Rating: MEDIUM for customer " + $customer.getCustomerId());
+end
+
+rule "Credit Score Band C"
+    agenda-group "decision-tables"
+    salience 90
+    when
+        $customer : Customer()
+        $credit : CreditScore(customerId == $customer.customerId, score >= 550, score < 650)
+        $account : Account(customerId == $customer.customerId, balance >= 5000)
+    then
+        $customer.setRiskRating("MEDIUM");
+        System.out.println("Risk Rating: MEDIUM for customer " + $customer.getCustomerId());
+end
+
+rule "Credit Score Band D"
+    agenda-group "decision-tables"
+    salience 85
+    when
+        $customer : Customer()
+        $credit : CreditScore(customerId == $customer.customerId, score < 550)
+    then
+        $customer.setRiskRating("HIGH");
+        System.out.println("Risk Rating: HIGH for customer " + $customer.getCustomerId());
+end
+
+// Transaction limit decision table
+rule "Set Transaction Limit - VIP"
+    agenda-group "decision-tables"
+    salience 80
+    when
+        $customer : Customer(vip == true)
+        $account : Account(customerId == $customer.customerId)
+    then
+        modify($account) { setDailyLimit(new java.math.BigDecimal("100000")) }
+end
+
+rule "Set Transaction Limit - High Credit"
+    agenda-group "decision-tables"
+    salience 75
+    when
+        $customer : Customer(vip == false)
+        $credit : CreditScore(customerId == $customer.customerId, score >= 700)
+        $account : Account(customerId == $customer.customerId)
+    then
+        modify($account) { setDailyLimit(new java.math.BigDecimal("25000")) }
+end
+
+rule "Set Transaction Limit - Medium Credit"
+    agenda-group "decision-tables"
+    salience 70
+    when
+        $customer : Customer(vip == false)
+        $credit : CreditScore(customerId == $customer.customerId, score >= 600, score < 700)
+        $account : Account(customerId == $customer.customerId)
+    then
+        modify($account) { setDailyLimit(new java.math.BigDecimal("10000")) }
+end
+
+rule "Set Transaction Limit - Low Credit"
+    agenda-group "decision-tables"
+    salience 65
+    when
+        $customer : Customer(vip == false)
+        $credit : CreditScore(customerId == $customer.customerId, score < 600)
+        $account : Account(customerId == $customer.customerId)
+    then
+        modify($account) { setDailyLimit(new java.math.BigDecimal("2500")) }
+end 

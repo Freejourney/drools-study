@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    
+    <!-- Console appender for development -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for application logs -->
+    <appender name="APPLICATION" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/drools-study-application.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/drools-study-application.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for Drools rule execution logs -->
+    <appender name="DROOLS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/drools-rules.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/drools-rules.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for performance monitoring -->
+    <appender name="PERFORMANCE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/performance.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/performance.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- File appender for risk alerts -->
+    <appender name="RISK_ALERTS" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/risk-alerts.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>logs/risk-alerts.%d{yyyy-MM-dd}.log</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>90</maxHistory>
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{50} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    
+    <!-- Async appender for better performance -->
+    <appender name="ASYNC_APPLICATION" class="ch.qos.logback.classic.AsyncAppender">
+        <appender-ref ref="APPLICATION"/>
+        <queueSize>512</queueSize>
+        <discardingThreshold>20</discardingThreshold>
+        <maxFlushTime>1000</maxFlushTime>
+    </appender>
+    
+    <!-- Logger configurations -->
+    
+    <!-- Root logger -->
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ASYNC_APPLICATION"/>
+    </root>
+    
+    <!-- Drools specific loggers -->
+    <logger name="org.drools" level="WARN" additivity="false">
+        <appender-ref ref="DROOLS"/>
+    </logger>
+    
+    <logger name="org.kie" level="WARN" additivity="false">
+        <appender-ref ref="DROOLS"/>
+    </logger>
+    
+    <!-- Application specific loggers -->
+    <logger name="com.drools.study" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="APPLICATION"/>
+    </logger>
+    
+    <logger name="com.drools.study.service.DroolsService" level="DEBUG" additivity="false">
+        <appender-ref ref="DROOLS"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    
+    <logger name="com.drools.study.service.RiskControlService" level="INFO" additivity="false">
+        <appender-ref ref="RISK_ALERTS"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    
+    <logger name="com.drools.study.performance" level="INFO" additivity="false">
+        <appender-ref ref="PERFORMANCE"/>
+        <appender-ref ref="CONSOLE"/>
+    </logger>
+    
+    <!-- Spring Framework loggers -->
+    <logger name="org.springframework" level="WARN"/>
+    <logger name="org.springframework.boot" level="INFO"/>
+    <logger name="org.springframework.web" level="DEBUG"/>
+    
+    <!-- Database loggers -->
+    <logger name="org.hibernate" level="WARN"/>
+    <logger name="org.hibernate.SQL" level="DEBUG"/>
+    <logger name="org.hibernate.type.descriptor.sql.BasicBinder" level="TRACE"/>
+    
+    <!-- Test environment specific configuration -->
+    <springProfile name="test">
+        <logger name="com.drools.study" level="WARN" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+        <logger name="org.drools" level="ERROR"/>
+        <logger name="org.kie" level="ERROR"/>
+    </springProfile>
+    
+    <!-- Development environment specific configuration -->
+    <springProfile name="dev">
+        <logger name="com.drools.study" level="DEBUG" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+            <appender-ref ref="APPLICATION"/>
+        </logger>
+        <logger name="org.drools" level="DEBUG"/>
+        <logger name="org.kie" level="DEBUG"/>
+    </springProfile>
+    
+    <!-- Production environment specific configuration -->
+    <springProfile name="prod">
+        <logger name="com.drools.study" level="INFO" additivity="false">
+            <appender-ref ref="ASYNC_APPLICATION"/>
+        </logger>
+        <logger name="org.drools" level="WARN"/>
+        <logger name="org.kie" level="WARN"/>
+        <root level="WARN">
+            <appender-ref ref="ASYNC_APPLICATION"/>
+        </root>
+    </springProfile>
+    
+</configuration> 

@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kmodule xmlns="http://www.drools.org/xsd/kmodule">
+    
+    <!-- Knowledge Base definitions -->
+    <kbase name="risk-control-rules" 
+           packages="com.drools.study.rules" 
+           default="true"
+           eventProcessingMode="stream"
+           equalsBehavior="identity">
+           
+        <!-- Stateful Session for interactive processing -->
+        <ksession name="risk-control-session" 
+                  type="stateful" 
+                  default="true"
+                  clockType="realtime">
+            <workItemHandlers>
+                <workItemHandler name="CustomHandler" type="com.drools.study.handlers.CustomWorkItemHandler"/>
+            </workItemHandlers>
+        </ksession>
+        
+        <!-- Stateless Session for batch processing -->
+        <ksession name="risk-control-stateless" 
+                  type="stateless"
+                  clockType="realtime"/>
+        
+        <!-- Credit Scoring Session -->
+        <ksession name="credit-scoring-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+                  
+        <!-- Transaction Monitoring Session -->
+        <ksession name="transaction-monitoring-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+                  
+        <!-- Fraud Detection Session -->
+        <ksession name="fraud-detection-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+                  
+        <!-- Loan Approval Session -->
+        <ksession name="loan-approval-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+    </kbase>
+    
+    <!-- Advanced Features Knowledge Base -->
+    <kbase name="advanced-features" 
+           packages="com.drools.study.rules.advanced" 
+           eventProcessingMode="stream"
+           equalsBehavior="equality">
+           
+        <ksession name="advanced-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+    </kbase>
+    
+    <!-- Performance Testing Knowledge Base -->
+    <kbase name="performance-testing" 
+           packages="com.drools.study.rules.performance" 
+           eventProcessingMode="cloud"
+           equalsBehavior="identity">
+           
+        <ksession name="performance-session" 
+                  type="stateless"
+                  clockType="pseudo"/>
+    </kbase>
+    
+    <!-- Decision Tables Knowledge Base -->
+    <kbase name="decision-tables" 
+           packages="com.drools.study.rules.tables"
+           eventProcessingMode="cloud"
+           equalsBehavior="identity">
+           
+        <ksession name="decision-table-session" 
+                  type="stateful"
+                  clockType="realtime"/>
+    </kbase>
+    
+</kmodule> 

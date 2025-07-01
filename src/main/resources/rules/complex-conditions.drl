@@ -1,0 +1,430 @@
+package com.drools.study.rules;
+
+import com.drools.study.model.*;
+import java.util.List;
+import java.util.ArrayList;
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
+
+/**
+ * Complex Conditional Elements Demonstration
+ * 
+ * This file demonstrates advanced Drools conditional elements:
+ * - AND, OR, NOT logical operators
+ * - EXISTS, FORALL quantifiers  
+ * - ACCUMULATE for calculations
+ * - COLLECT for gathering facts
+ * - Nested conditions and complex patterns
+ * 
+ * All examples focus on risk control scenarios.
+ */
+
+// Global variables for complex calculations
+global java.util.List<String> riskFactors;
+global java.math.BigDecimal riskThreshold;
+
+// Rule 1: Complex AND conditions with nested patterns
+rule "High Risk Profile - Multiple AND Conditions"
+    when
+        // Customer with multiple risk indicators
+        $customer : Customer(
+            // Age-based risk
+            age > 65 or age < 25
+        ) and
+        
+        // Account conditions
+        $account : Account(
+            customerId == $customer.customerId,
+            balance < 1000,
+            accountType == "CHECKING"
+        ) and
+        
+        // Recent transaction patterns
+        $txn : Transaction(
+            customerId == $customer.customerId,
+            amount > 5000,
+            this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(7))
+        ) and
+        
+        // Credit score condition
+        $creditScore : CreditScore(
+            customerId == $customer.customerId,
+            score < 600
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("HIGH_RISK_PROFILE");
+        alert.setSeverity("HIGH");
+        alert.setDescription("Customer has multiple risk indicators: low account balance, large recent transaction, poor credit score, and age-based risk");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        riskFactors.add("Multiple AND conditions triggered for customer: " + $customer.getCustomerId());
+        
+        System.out.println("HIGH RISK ALERT: Complex AND conditions met for customer " + $customer.getCustomerId());
+end
+
+// Rule 2: Complex OR conditions for flexible risk detection
+rule "Moderate Risk - OR Conditions"
+    when
+        $customer : Customer() and
+        (
+            // High-value transaction OR
+            (Transaction(
+                customerId == $customer.customerId,
+                amount > 10000
+            ) and not RiskAlert(customerId == $customer.customerId, alertType == "HIGH_VALUE_TXN")) or
+            
+            // Multiple transactions in short time OR
+            (Number(intValue >= 5) from accumulate(
+                Transaction(customerId == $customer.customerId, 
+                           this.getTransactionDate().isAfter(LocalDateTime.now().minusHours(24))),
+                count(1)
+            )) or
+            
+            // Unusual geographic location OR
+            (Transaction(
+                customerId == $customer.customerId,
+                location not in ("HOME_CITY", "WORK_CITY")
+            ))
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("MODERATE_RISK");
+        alert.setSeverity("MEDIUM");
+        alert.setDescription("Customer triggered OR-based risk conditions");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("MODERATE RISK: OR conditions triggered for customer " + $customer.getCustomerId());
+end
+
+// Rule 3: NOT condition - Customers without recent activity
+rule "Inactive Customer Risk"
+    when
+        $customer : Customer(status == "ACTIVE") and
+        
+        // NOT exists recent transaction
+        not Transaction(
+            customerId == $customer.customerId,
+            this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(90))
+        ) and
+        
+        // NOT exists recent login  
+        not Account(
+            customerId == $customer.customerId,
+            lastLoginDate.isAfter(LocalDateTime.now().minusDays(30))
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("INACTIVE_CUSTOMER");
+        alert.setSeverity("LOW");
+        alert.setDescription("Customer has no recent activity - potential dormant account");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("INACTIVE CUSTOMER: No recent activity for customer " + $customer.getCustomerId());
+end
+
+// Rule 4: EXISTS condition - Risk when specific patterns exist
+rule "Fraud Pattern Exists"
+    when
+        $customer : Customer() and
+        
+        // EXISTS: Large cash withdrawal followed by immediate deposit
+        exists (
+            Transaction(
+                customerId == $customer.customerId,
+                transactionType == "WITHDRAWAL",
+                amount > 5000,
+                $withdrawalTime : transactionDate
+            ) and
+            Transaction(
+                customerId == $customer.customerId,
+                transactionType == "DEPOSIT", 
+                amount > 4000,
+                transactionDate.isAfter($withdrawalTime),
+                transactionDate.isBefore($withdrawalTime.plusHours(2))
+            )
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("POTENTIAL_FRAUD");
+        alert.setSeverity("HIGH");
+        alert.setDescription("Suspicious pattern detected: Large withdrawal followed by quick deposit");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("FRAUD PATTERN: Suspicious withdrawal-deposit pattern for customer " + $customer.getCustomerId());
+end
+
+// Rule 5: FORALL condition - All transactions must meet criteria
+rule "All Transactions High Value"
+    when
+        $customer : Customer() and
+        
+        // At least one transaction exists
+        exists Transaction(customerId == $customer.customerId) and
+        
+        // FORALL: All transactions in last 30 days are high value
+        forall (
+            $txn : Transaction(
+                customerId == $customer.customerId,
+                this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(30))
+            )
+            Transaction(
+                this == $txn,
+                amount > 1000
+            )
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("HIGH_VALUE_PATTERN");
+        alert.setSeverity("MEDIUM");
+        alert.setDescription("All recent transactions are high-value - unusual spending pattern");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("HIGH VALUE PATTERN: All transactions high-value for customer " + $customer.getCustomerId());
+end
+
+// Rule 6: ACCUMULATE for complex calculations
+rule "Accumulate Risk Score"
+    when
+        $customer : Customer() and
+        
+        // Accumulate total transaction amount in last 7 days
+        $totalAmount : Number(doubleValue > 50000) from accumulate(
+            Transaction(
+                customerId == $customer.customerId,
+                this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(7)),
+                $amt : amount
+            ),
+            sum($amt)
+        ) and
+        
+        // Accumulate number of different locations
+        $locationCount : Number(intValue > 5) from accumulate(
+            Transaction(
+                customerId == $customer.customerId,
+                this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(7)),
+                $loc : location
+            ),
+            count($loc)
+        )
+    then
+        // Calculate risk score based on accumulations
+        double riskScore = ($totalAmount.doubleValue() / 10000) + ($locationCount.intValue() * 2);
+        
+        RiskAssessment assessment = new RiskAssessment();
+        assessment.setCustomerId($customer.getCustomerId());
+        assessment.setRiskScore(BigDecimal.valueOf(riskScore));
+        assessment.setAssessmentType("ACCUMULATED_RISK");
+        assessment.setDescription("Risk based on accumulated spending: $" + $totalAmount + 
+                                " across " + $locationCount + " locations");
+        assessment.setAssessedAt(LocalDateTime.now());
+        
+        insert(assessment);
+        System.out.println("ACCUMULATED RISK: Score " + riskScore + " for customer " + $customer.getCustomerId());
+end
+
+// Rule 7: COLLECT to gather related facts
+rule "Collect Suspicious Transactions"
+    when
+        $customer : Customer() and
+        
+        // Collect all high-value transactions
+        $suspiciousTxns : ArrayList(size > 3) from collect(
+            Transaction(
+                customerId == $customer.customerId,
+                amount > 5000,
+                this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(30))
+            )
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("MULTIPLE_HIGH_VALUE");
+        alert.setSeverity("HIGH");
+        alert.setDescription("Collected " + $suspiciousTxns.size() + " high-value transactions in 30 days");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        
+        // Log details of collected transactions
+        riskFactors.add("Collected " + $suspiciousTxns.size() + " suspicious transactions for customer " + $customer.getCustomerId());
+        System.out.println("COLLECTED TRANSACTIONS: " + $suspiciousTxns.size() + " high-value txns for customer " + $customer.getCustomerId());
+end
+
+// Rule 8: Complex nested conditions with multiple conditional elements
+rule "Complex Nested Risk Pattern"
+    when
+        $customer : Customer(status == "ACTIVE") and
+        
+        // Complex nested AND/OR/NOT pattern
+        (
+            // Pattern 1: High-risk geographic behavior
+            (
+                exists Transaction(
+                    customerId == $customer.customerId,
+                    location == "HIGH_RISK_COUNTRY"
+                ) and
+                not RiskProfile(
+                    customerId == $customer.customerId,
+                    internationalTransactionsAllowed == true
+                )
+            ) or
+            
+            // Pattern 2: Velocity and amount risk
+            (
+                $velocityCount : Number(intValue >= 10) from accumulate(
+                    Transaction(
+                        customerId == $customer.customerId,
+                        this.getTransactionDate().isAfter(LocalDateTime.now().minusHours(1))
+                    ),
+                    count(1)
+                ) and
+                
+                $totalAmount : Number(doubleValue > 100000) from accumulate(
+                    Transaction(
+                        customerId == $customer.customerId,
+                        this.getTransactionDate().isAfter(LocalDateTime.now().minusHours(1)),
+                        $amt : amount
+                    ),
+                    sum($amt)
+                ) and
+                
+                not RiskProfile(
+                    customerId == $customer.customerId,
+                    highVelocityApproved == true
+                )
+            )
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("COMPLEX_RISK_PATTERN");
+        alert.setSeverity("CRITICAL");
+        alert.setDescription("Complex nested risk conditions detected - immediate review required");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        
+        // Update risk threshold for future evaluations
+        riskThreshold = riskThreshold.multiply(BigDecimal.valueOf(0.8)); // Lower threshold
+        
+        System.out.println("CRITICAL ALERT: Complex nested risk pattern for customer " + $customer.getCustomerId());
+end
+
+// Rule 9: Advanced accumulate with conditional collection
+rule "Advanced Risk Calculation"
+    when
+        $customer : Customer() and
+        
+        // Accumulate with conditional logic
+        $riskMetrics : Object() from accumulate(
+            Transaction(
+                customerId == $customer.customerId,
+                this.getTransactionDate().isAfter(LocalDateTime.now().minusDays(30)),
+                $amt : amount,
+                $type : transactionType,
+                $loc : location
+            ),
+            init(
+                double totalAmount = 0;
+                int internationalCount = 0; 
+                int cashCount = 0;
+                double maxSingle = 0;
+            ),
+            action(
+                totalAmount += $amt;
+                if (!$loc.equals("HOME_COUNTRY")) internationalCount++;
+                if ($type.equals("CASH_WITHDRAWAL")) cashCount++;
+                if ($amt > maxSingle) maxSingle = $amt;
+            ),
+            result(
+                new Object[]{totalAmount, internationalCount, cashCount, maxSingle}
+            )
+        ) and
+        
+        eval(
+            ((Object[])$riskMetrics)[0] != null &&
+            ((Double)((Object[])$riskMetrics)[0]) > 100000 &&
+            ((Integer)((Object[])$riskMetrics)[1]) > 5
+        )
+    then
+        Object[] metrics = (Object[])$riskMetrics;
+        double totalAmount = (Double)metrics[0];
+        int internationalCount = (Integer)metrics[1];
+        int cashCount = (Integer)metrics[2];
+        double maxSingle = (Double)metrics[3];
+        
+        RiskAssessment assessment = new RiskAssessment();
+        assessment.setCustomerId($customer.getCustomerId());
+        assessment.setRiskScore(BigDecimal.valueOf(
+            (totalAmount / 10000) + (internationalCount * 5) + (cashCount * 3) + (maxSingle / 1000)
+        ));
+        assessment.setAssessmentType("ADVANCED_METRICS");
+        assessment.setDescription(
+            String.format("Advanced metrics: Total=$%.2f, Intl=%d, Cash=%d, MaxSingle=$%.2f", 
+                         totalAmount, internationalCount, cashCount, maxSingle)
+        );
+        assessment.setAssessedAt(LocalDateTime.now());
+        
+        insert(assessment);
+        System.out.println("ADVANCED METRICS: Comprehensive risk calculation for customer " + $customer.getCustomerId());
+end
+
+// Rule 10: Conditional element combination with temporal reasoning
+rule "Temporal Risk Pattern"
+    when
+        $customer : Customer() and
+        
+        // Time-based pattern matching
+        $firstTxn : Transaction(
+            customerId == $customer.customerId,
+            amount > 10000,
+            $startTime : transactionDate
+        ) and
+        
+        // Subsequent transactions within time window
+        Number(intValue >= 3) from accumulate(
+            Transaction(
+                customerId == $customer.customerId,
+                amount > 5000,
+                transactionDate.isAfter($startTime),
+                transactionDate.isBefore($startTime.plusHours(24)),
+                this != $firstTxn
+            ),
+            count(1)
+        ) and
+        
+        // No risk profile exemption
+        not RiskProfile(
+            customerId == $customer.customerId,
+            timeBasedExemption == true
+        ) and
+        
+        // Verify customer is not already flagged for this pattern
+        not RiskAlert(
+            customerId == $customer.customerId,
+            alertType == "TEMPORAL_PATTERN",
+            createdAt.isAfter($startTime.minusHours(48))
+        )
+    then
+        RiskAlert alert = new RiskAlert();
+        alert.setCustomerId($customer.getCustomerId());
+        alert.setAlertType("TEMPORAL_PATTERN");
+        alert.setSeverity("HIGH");
+        alert.setDescription("High-frequency large transactions detected within 24-hour window");
+        alert.setCreatedAt(LocalDateTime.now());
+        
+        insert(alert);
+        System.out.println("TEMPORAL PATTERN: Time-based risk detected for customer " + $customer.getCustomerId());
+end 
